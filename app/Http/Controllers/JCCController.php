@@ -8,11 +8,12 @@ use Symfony\Component\HttpClient\HttpClient;
 
 class JCCController extends Controller
 {
-    const MAX_PROFILES = 98;
+    const MAX_PROFILES = 250;
+    const TIME_OUT = 300;
 
     public function grabData()
     {
-        $client = new Client(HttpClient::create(['timeout' => 60]));
+        $client = new Client(HttpClient::create(['timeout' => self::TIME_OUT]));
         $alphas = range('a', 'z');
         $inmates = [];
 
@@ -39,11 +40,8 @@ class JCCController extends Controller
                 return $node->text();
             });
 
-//            return array_search('error', $inmatesArr);
-
+            $numberOfPages = $inmatesArr[count($inmatesArr) - 1];
             $inmatesArrFiltered = array_slice($inmatesArr, 0, array_search('error', $inmatesArr) - 1);
-//            return $inmatesArrFiltered;
-            $numberOfPages = array_pop($inmatesArr);
 
             for ($i = 0; $i < count($inmatesArrFiltered); $i = $i + 7) {
                 $length = 7;
@@ -70,8 +68,6 @@ class JCCController extends Controller
                 ];
 
                 $crawler2 = $client->request('POST', 'http://jccweb.jacksongov.org/InmateSearch/Default.aspx', $pageParams);
-//            $inmate = [];
-//            $inmateDataKeys = ['ID', 'Last Name', 'First Name', 'Middle', 'DOB', 'Race', 'Sex'];
 
                 $inmatesArr = $crawler2->filter('#GridView1 > tr td')->each(function ($node) {
                     if($node->text() == 1) {
@@ -80,7 +76,6 @@ class JCCController extends Controller
                     return $node->text();
                 });
 
-//                $inmatesArrFiltered2 = array_slice($inmatesArr, 0, 70);
                 $inmatesArrFiltered2 = array_slice($inmatesArr, 0, array_search('error', $inmatesArr) - 1);
 
                 for ($i = 0; $i < count($inmatesArrFiltered2); $i = $i + 7) {
@@ -99,6 +94,25 @@ class JCCController extends Controller
             }
         }
 
+        $this->writeToFile($inmates);
+
         return $inmates;
+    }
+
+    public function writeToFile($inmates)
+    {
+        $newArr = [];
+
+        $fileContents = file_get_contents('jcc.txt');
+
+        $decoded = json_decode($fileContents, true);
+
+        foreach ($inmates as $inmate) {
+            if(!in_array($inmate['ID'], $decoded)) {
+                $newArr[] = $inmate['ID'];
+            }
+        }
+
+        file_put_contents('jcc.txt', json_encode(array_merge($decoded, $newArr)));
     }
 }
