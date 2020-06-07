@@ -8,12 +8,12 @@ use Symfony\Component\HttpClient\HttpClient;
 
 class JCCController extends Controller
 {
-    const MAX_PROFILES = 4;
+    const MAX_PROFILES = 98;
 
     public function grabData()
     {
         $client = new Client(HttpClient::create(['timeout' => 60]));
-        $alphas = range('a', 'b');
+        $alphas = range('a', 'z');
         $inmates = [];
 
         foreach ($alphas as $alpha) {
@@ -26,15 +26,24 @@ class JCCController extends Controller
             ];
 
             $crawler = $client->request('POST', 'http://jccweb.jacksongov.org/InmateSearch/Default.aspx', $params);
+            $viewState = $crawler->filter('#__VIEWSTATE')->attr('value');
+            $eventValidation = $crawler->filter('#__EVENTVALIDATION')->attr('value');
 
             $inmate = [];
             $inmateDataKeys = ['ID', 'Last Name', 'First Name', 'Middle', 'DOB', 'Race', 'Sex'];
 
             $inmatesArr = $crawler->filter('#GridView1 > tr td')->each(function ($node) {
+                if($node->text() == 1) {
+                    return 'error';
+                }
                 return $node->text();
             });
 
-            $inmatesArrFiltered = array_slice($inmatesArr, 0, 70);
+//            return array_search('error', $inmatesArr);
+
+            $inmatesArrFiltered = array_slice($inmatesArr, 0, array_search('error', $inmatesArr) - 1);
+//            return $inmatesArrFiltered;
+            $numberOfPages = array_pop($inmatesArr);
 
             for ($i = 0; $i < count($inmatesArrFiltered); $i = $i + 7) {
                 $length = 7;
@@ -43,9 +52,50 @@ class JCCController extends Controller
                     $inmate[$inmateDataKeys[$j]] = $oneInmate[$j];
                 }
 
-                if(count($inmates) >= self::MAX_PROFILES) {break 2;}
+                if (count($inmates) >= self::MAX_PROFILES) {
+                    break 2;
+                }
 
                 $inmates[] = $inmate;
+            }
+
+            for ($p = 2; $p <= $numberOfPages; $p++) {
+                $pageParams = [
+                    '__EVENTTARGET' => 'GridView1',
+                    '__EVENTARGUMENT' => "Page$${p}",
+                    '__VIEWSTATE' => $viewState,
+                    '__VIEWSTATEGENERATOR' => '208A8EE7',
+                    '__EVENTVALIDATION' => $eventValidation,
+                    'edtLastName' => $alpha,
+                ];
+
+                $crawler2 = $client->request('POST', 'http://jccweb.jacksongov.org/InmateSearch/Default.aspx', $pageParams);
+//            $inmate = [];
+//            $inmateDataKeys = ['ID', 'Last Name', 'First Name', 'Middle', 'DOB', 'Race', 'Sex'];
+
+                $inmatesArr = $crawler2->filter('#GridView1 > tr td')->each(function ($node) {
+                    if($node->text() == 1) {
+                        return 'error';
+                    }
+                    return $node->text();
+                });
+
+//                $inmatesArrFiltered2 = array_slice($inmatesArr, 0, 70);
+                $inmatesArrFiltered2 = array_slice($inmatesArr, 0, array_search('error', $inmatesArr) - 1);
+
+                for ($i = 0; $i < count($inmatesArrFiltered2); $i = $i + 7) {
+                    $length = 7;
+                    $oneInmate1 = array_slice($inmatesArrFiltered2, $i, $length);
+                    for ($j = 0; $j < count($oneInmate1); $j++) {
+                        $inmate[$inmateDataKeys[$j]] = $oneInmate1[$j];
+                    }
+
+                    if (count($inmates) >= self::MAX_PROFILES) {
+                        break 2;
+                    }
+
+                    $inmates[] = $inmate;
+                }
             }
         }
 
